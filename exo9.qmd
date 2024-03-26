@@ -1,0 +1,293 @@
+---
+title: "exo9"
+format: html
+editor: visual
+---
+
+**Step 1**
+
+Loading data
+
+median,mean, sd, minimum, maximum, 1st and 3rd quartile value
+
+```{r}
+f <- read.csv("https://raw.githubusercontent.com/difiore/ada-2024-datasets/main/Street_et_al_2017.csv")
+
+str(f)
+
+variables <- f[, c(
+  "Social_learning", 
+  "Research_effort", 
+  "ECV", 
+  "Group_size", 
+  "Gestation", 
+  "Weaning", 
+  "Longevity", 
+  "Sex_maturity", 
+  "Body_mass", 
+  "Maternal_investment", 
+  "Repro_lifespan"
+)]
+
+summary <- data.frame(
+  Median = apply(variables, 2, median, na.rm = TRUE),
+  Mean = colMeans(variables, na.rm = TRUE),
+  SD = apply(variables, 2, sd, na.rm = TRUE),
+  Min = apply(variables, 2, min, na.rm = TRUE),
+  Max = apply(variables, 2, max, na.rm = TRUE),
+  Quartile_1 = apply(variables, 2, quantile, 0.25, na.rm = TRUE),
+  Quartile_3 = apply(variables, 2, quantile, 0.75, na.rm = TRUE)
+)
+
+print(summary)
+```
+
+**Step 2**
+
+Plot ECV against grpsize, longevity, weaning, and reproductive lifespan
+
+```{r}
+
+library(ggplot2)
+
+
+ggplot(data = f, aes(x = Group_size, y = ECV)) +
+  geom_point() +
+  labs(title = "Brain Size and Social Group Size",
+       x = "Group Size",
+       y = "Brain Size (ECV)")
+
+ggplot(data = f, aes(x = Longevity, y = ECV)) +
+  geom_point() +
+  labs(title = "Brain Size and Longevity",
+       x = "Longevity",
+       y = "Brain Size (ECV)")
+
+ggplot(data = f, aes(x = Weaning, y = ECV)) +
+  geom_point() +
+  labs(title = "Brain Size and Juvenile Period Length",
+       x = "Juvenile Period Length",
+       y = "Brain Size (ECV)")
+
+ggplot(data = f, aes(x = Repro_lifespan, y = ECV)) +
+  geom_point() +
+  labs(title = "Brain Size and Reproductive Lifespan",
+       x = "Reproductive Lifespan",
+       y = "Brain Size (ECV)")
+
+```
+
+**Step 3**
+
+beta 1 and beta 0 of ECV as function of social group size by hand (OLS)
+
+```{r}
+library(dplyr)
+d <- filter(f, !is.na(ECV) & !is.na(Group_size))
+
+mean_ecv <- mean(d$ECV)
+mean_GS <- mean(d$Group_size)
+beta1 <- cov(d$Group_size, d$ECV) / var(d$Group_size)
+beta1 #slop
+beta0 <- mean_ecv - beta1 * mean_GS
+beta0 #intersept
+
+```
+
+**Step 4**
+
+Confirmation using lm()
+
+```{r}
+lm <- lm(ECV ~ Group_size, data = d)
+summary(lm)
+```
+
+Step 5
+
+Regression coeficient of catarrhine, platyrrhines, and strepsirhines
+
+1.  by hand
+
+```{r}
+library(dplyr)
+#Strepsirhini
+strepsirhini <- d %>%
+  filter(Taxonomic_group == "Strepsirhini")  # Filter for Strepsirhini group
+mean_ecv_strepsirhini <- mean(strepsirhini$ECV)
+mean_GS_strepsirhini <- mean(strepsirhini$Group_size)
+
+beta1_strepsirhini <- cov(strepsirhini$Group_size, strepsirhini$ECV) / var(strepsirhini$Group_size)
+beta1_strepsirhini #slope
+beta0_strepsirhini <- mean_ecv_strepsirhini - beta1_strepsirhini * mean_GS_strepsirhini
+beta0_strepsirhini #intercept
+
+#Platyrrhini
+platyrrhini <- d %>%
+  filter(Taxonomic_group == "Platyrrhini")  # Filter for Platyrrhini group
+
+mean_ecv_platyrrhini <- mean(platyrrhini$ECV)
+mean_GS_platyrrhini <- mean(platyrrhini$Group_size)
+
+beta1_platyrrhini <- cov(platyrrhini$Group_size, platyrrhini$ECV) / var(platyrrhini$Group_size)
+beta1_platyrrhini #slope
+beta0_platyrrhini <- mean_ecv_platyrrhini - beta1_platyrrhini * mean_GS_platyrrhini
+beta0_platyrrhini #intercept
+
+# Catarrhini
+
+catarrhini <- d %>%
+  filter(Taxonomic_group == "Catarrhini")  # Filter for Platyrrhini group
+
+mean_ecv_platyrrhini <- mean(catarrhini$ECV)
+mean_GS_platyrrhini <- mean(catarrhini$Group_size)
+
+beta1_platyrrhini <- cov(catarrhini$Group_size, catarrhini$ECV) / var(catarrhini$Group_size)
+beta1_platyrrhini #slope
+beta0_platyrrhini <- mean_ecv_platyrrhini - beta1_platyrrhini * mean_GS_platyrrhini
+beta0_platyrrhini #intercept
+
+```
+
+2.  Combined
+
+```{r}
+library(dplyr)
+lm_models <- d %>%
+  group_by(Taxonomic_group) %>%
+  filter(Taxonomic_group %in% c("Strepsirhini", "Platyrrhini", "Catarrhini")) %>%
+    summarise(beta0 = coef(lm(ECV ~ Group_size))[[1]], 
+            beta1 = coef(lm(ECV ~ Group_size))[[2]])
+print(lm_models)
+```
+
+determine whether they are different or not (ANOVA)
+
+```{r}
+groups <- c("Strepsirhini", "Platyrrhini", "Catarrhini")
+
+models <- lapply(groups, function(group) {
+  portion <- subset(d, Taxonomic_group == group)
+  lm(ECV ~ Group_size, data = portion)
+})
+
+coefficients <- lapply(models, coef)
+coefficients
+coefficients_df <- data.frame(
+  Group = rep(groups, each = ncol(models[[1]])),
+  Coefficient = unlist(coefficients)
+)
+coefficients_df
+# ANOVA
+anova_results <- aov(Coefficient ~ Group, data = coefficients_df)
+summary(anova_results)
+
+#Tukey (detailled comparaison of the 3 suborder)
+tukey_results <- TukeyHSD(anova_results)
+print(tukey_results)
+```
+
+**Conclusion:** they are not the same statistically.
+
+**Step 6**
+
+1.  Calculate the standard error for the slope coefficient, the 95% CI, and the *p* value associated with this coefficient **by hand.**
+
+```{r}
+lm <- lm(ECV ~ Group_size, data = d)
+SSY <- sum((lm$model$ECV - mean(lm$model$ECV))^2)
+SSR <- sum((lm$fitted.values - mean(lm$model$ECV))^2)
+SSE <- sum((lm$model$ECV - lm$fitted.values )^2)
+SSY
+SSR
+SSE
+
+df_regression <- 1
+df_error <- nrow(d) - df_regression - 1
+df_y <- nrow(d) - df_regression
+MSR <- SSR / df_regression
+MSE <- SSE / df_error
+MSY <- SSY / df_y
+fratio <- MSR / MSE
+MSR
+MSE
+MSY
+fratio
+SSX <- sum((d$Group_size - mean(d$Group_size))^2)
+SE_beta1 <- sqrt(MSE /SSX )
+SE_beta1# standard error of the slope
+
+#estimate
+
+t_value <- beta1/SE_beta1
+t_value 
+
+p_value <- 2 * pt(-abs(t_value), df_error) 
+p_value
+
+alpha <- 0.05
+CI_lower_beta1 <- beta1 - qt(1 - alpha/2, df_error) * SE_beta1
+CI_upper_beta1 <- beta1 + qt(1 - alpha/2, df_error) * SE_beta1
+CI_lower_beta1
+CI_upper_beta1
+
+```
+
+2.  Calculate the standard error for the slope coefficient, the 95% CI, and the *p* value associated with this coefficient **using lm()**
+
+```{r}
+lm1 <- lm(ECV ~ Group_size, data = d)
+summary(lm1)
+CI <- confint(lm1)
+CI
+
+```
+
+**Step 7**
+
+1000 permutation
+
+Permute the response variable (ECV within each taxonomic group)
+
+```{r}
+
+permuted_slopes <- replicate(1000, {
+    permuted_data <- d %>%
+    group_by(Taxonomic_group) %>%
+    mutate(ECV_permuted = sample(ECV)) %>%
+    ungroup()
+  
+   lm_permuted <- lm(ECV_permuted ~ Group_size, data = permuted_data)
+  coef(lm_permuted)[2]
+})
+
+se_permuted <- sd(permuted_slopes)
+observed_slope <- beta1
+p_value_perm <- mean(abs(permuted_slopes) >= abs(observed_slope))
+z_score <- (observed_slope - mean(permuted_slopes)) / se_permuted
+p_value_theory <- 2 * pnorm(-abs(z_score))
+p_value_perm
+p_value_theory
+```
+
+**Step 8**
+
+Bootstrapping
+
+```{r}
+library(boot)
+boot_results <- boot(data = d, statistic = function(data, indices) {
+  lm_fit <- lm(ECV ~ Group_size, data = data[indices, ])
+  coef(lm_fit)[2]  
+}, R = 1000)
+
+boot_results
+# Percentile 
+ci_percentile <- quantile(boot_results$t, c(0.025, 0.975))
+print(ci_percentile)
+# Theory
+se_boot <- sd(boot_results$t)  
+z_score <- coef(lm)[2] / se_boot
+ci_theory <- coef(lm)[2] + c(-1, 1) * qnorm(0.975) * se_boot  
+print(ci_theory)
+```
